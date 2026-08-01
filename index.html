@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Subsea Market, Decoded: a clustering study of the top 15 players</title>
+<meta name="description" content="I clustered the top 15 subsea companies with machine learning. Six strategic groups emerged, and one of them explains the Saipem7 merger.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,500..800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --surface:#e9f1f3; --shallow:#c6d9de; --photic:#3d6478;
+    --mid:#16344a; --deep:#0b1c2c; --abyss:#050e18;
+    --ink:#132029; --paper:#e8eef4; --faded:#8fa6b8;
+    --gold:#f0b429; --cyan:#39c2d7; --coral:#f2705b; --green:#5fd68b; --lilac:#b48ce8;
+    --serif:'Source Serif 4', Georgia, serif;
+    --disp:'Archivo', system-ui, sans-serif;
+    --mono:'IBM Plex Mono', ui-monospace, monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{font-family:var(--serif);font-size:1.06rem;line-height:1.72;background:var(--abyss)}
+
+  /* ---- depth rail (signature) ---- */
+  #rail{position:fixed;left:0;top:0;bottom:0;width:76px;z-index:50;
+        border-right:1px solid rgba(143,166,184,.25);display:flex;flex-direction:column;
+        justify-content:space-between;padding:18px 0;pointer-events:none}
+  #rail .tick{font:500 .62rem var(--mono);color:var(--faded);letter-spacing:.06em;
+        text-align:center;position:relative}
+  #rail .tick::after{content:"";display:block;width:14px;height:1px;background:var(--faded);
+        opacity:.5;margin:4px auto 0}
+  #depthbox{position:fixed;left:0;bottom:0;width:76px;z-index:51;background:var(--abyss);
+        border-top:1px solid rgba(143,166,184,.35);border-right:1px solid rgba(143,166,184,.25);
+        padding:10px 4px;text-align:center}
+  #depthbox .lbl{font:500 .55rem var(--mono);color:var(--faded);letter-spacing:.14em}
+  #depthbox .val{font:600 .8rem var(--mono);color:var(--gold)}
+  @media(max-width:900px){#rail,#depthbox{display:none}}
+
+  main{max-width:100%}
+  .band{padding:5.5rem 1.5rem}
+  .inner{max-width:44rem;margin:0 auto}
+  .wide{max-width:60rem;margin:0 auto}
+
+  /* strata */
+  .z0{background:var(--surface);color:var(--ink)}
+  .z1{background:var(--shallow);color:var(--ink)}
+  .z2{background:var(--photic);color:var(--paper)}
+  .z3{background:var(--mid);color:var(--paper)}
+  .z4{background:var(--deep);color:var(--paper)}
+  .z5{background:var(--abyss);color:var(--paper)}
+  .z2 a,.z3 a,.z4 a,.z5 a{color:var(--cyan)}
+  .z0 a,.z1 a{color:#1a5c7a}
+
+  .eyebrow{font:600 .72rem var(--disp);letter-spacing:.22em;text-transform:uppercase;margin-bottom:1rem}
+  .z0 .eyebrow,.z1 .eyebrow{color:#7a5410}
+  .z2 .eyebrow,.z3 .eyebrow,.z4 .eyebrow,.z5 .eyebrow{color:var(--gold)}
+  .depthtag{font:500 .68rem var(--mono);opacity:.65;margin-bottom:.4rem;letter-spacing:.08em}
+
+  h1{font:700 clamp(2.3rem,6vw,4.2rem)/1.04 var(--disp);font-stretch:125%;
+     letter-spacing:-.01em;margin:.6rem 0 1.4rem}
+  h2{font:700 clamp(1.5rem,3.4vw,2.2rem)/1.15 var(--disp);font-stretch:125%;margin:0 0 1.4rem}
+  h3{font:650 1.05rem var(--disp);font-stretch:110%;margin:2rem 0 .6rem}
+  p{margin:0 0 1.15rem}
+  .lede{font-size:1.28rem;line-height:1.6;font-style:italic}
+  .meta{display:flex;flex-wrap:wrap;gap:.4rem 1.6rem;font:500 .74rem var(--mono);
+        color:#4c6472;margin-top:2rem;padding-top:1.2rem;border-top:1px solid rgba(19,32,41,.25)}
+
+  .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+        gap:1px;background:rgba(19,32,41,.2);border:1px solid rgba(19,32,41,.2);margin:2.4rem 0}
+  .stat{background:var(--shallow);padding:1.2rem 1rem}
+  .stat b{display:block;font:700 1.7rem var(--disp);font-stretch:120%;color:#7a5410}
+  .stat span{font:500 .72rem var(--mono);line-height:1.5;display:block;margin-top:.3rem;color:#3a505c}
+
+  figure{margin:2.4rem 0}
+  figure img{width:100%;display:block;border:1px solid rgba(143,166,184,.3)}
+  figcaption{font:400 .8rem var(--mono);opacity:.7;margin-top:.6rem;line-height:1.5}
+
+  .step{border-left:2px solid var(--gold);padding:.1rem 0 .1rem 1.3rem;margin:1.6rem 0}
+  .step .tool{font:500 .72rem var(--mono);color:var(--gold);letter-spacing:.05em}
+  .step h3{margin:.15rem 0 .35rem}
+  .step p{margin-bottom:0;font-size:.98rem}
+
+  .finding{display:grid;grid-template-columns:10px 1fr;gap:1.2rem;margin:1.8rem 0}
+  .finding .bar{border-radius:2px}
+  .finding h3{margin-top:0}
+  .finding p{font-size:.98rem;margin-bottom:0}
+
+  blockquote{border-left:3px solid var(--gold);padding-left:1.3rem;margin:2rem 0;
+        font-size:1.22rem;font-style:italic;line-height:1.55}
+
+  .btn{display:inline-block;font:650 .85rem var(--disp);font-stretch:115%;letter-spacing:.04em;
+       padding:.85rem 1.6rem;border:1.5px solid var(--gold);color:var(--gold);
+       text-decoration:none;margin:.4rem .6rem .4rem 0;transition:background .15s,color .15s}
+  .btn:hover{background:var(--gold);color:var(--abyss)}
+  .btn.solid{background:var(--gold);color:var(--abyss)}
+  .btn.solid:hover{background:transparent;color:var(--gold)}
+
+  .sources{font:400 .8rem var(--mono);line-height:1.9;opacity:.75}
+  footer .seabed{font:500 .68rem var(--mono);letter-spacing:.3em;text-align:center;
+        color:var(--faded);margin-top:3rem;opacity:.55}
+  section{content-visibility:auto}
+  @media(prefers-reduced-motion:no-preference){
+    .band .inner,.band .wide{animation:rise .7s ease both}
+    @keyframes rise{from{opacity:.001;transform:translateY(14px)}to{opacity:1;transform:none}}
+  }
+</style>
+</head>
+<body>
+
+<div id="rail" aria-hidden="true">
+  <div class="tick">0&nbsp;m</div><div class="tick">500</div><div class="tick">1000</div>
+  <div class="tick">1500</div><div class="tick">2000</div><div class="tick">2500</div>
+  <div class="tick" style="margin-bottom:64px">3000</div>
+</div>
+<div id="depthbox" aria-hidden="true">
+  <div class="lbl">DEPTH</div><div class="val" id="dv">0 m</div>
+</div>
+
+<main>
+
+<!-- 0 m · SURFACE -->
+<section class="band z0" id="top">
+  <div class="inner">
+    <div class="depthtag">0 m · surface</div>
+    <div class="eyebrow">A market study · July 2026</div>
+    <h1>The Subsea Market,<br>Decoded</h1>
+    <p class="lede">I clustered the fifteen largest subsea companies with machine learning.
+    Six strategic groups emerged from the data, and one of them explains the biggest
+    merger this industry has seen in a decade.</p>
+    <div class="meta">
+      <span>WRITTEN BY A SALES PROFESSIONAL WITH A POSTGRAD IN DATA SCIENCE</span>
+      <span>STACK: PYTHON · PANDAS · SCIKIT-LEARN · SCIPY</span>
+      <span>CODE &amp; DATA: OPEN, THIS REPOSITORY</span>
+    </div>
+  </div>
+</section>
+
+<!-- 400 m · THE MARKET -->
+<section class="band z1">
+  <div class="inner">
+    <div class="depthtag">400 m · the water column</div>
+    <h2>Subsea is not coming back. It is already back.</h2>
+    <p>In the last ninety days alone, the industry awarded roughly USD 4.4&nbsp;billion in
+    subsea contracts: a supermajor SURF award in Brazil, a billion-dollar installation
+    package in Angola, a cluster of tie-backs in Norway. Behind the awards sits a funded
+    pipeline: Petrobras plans 180 new wells and 12 FPSOs in the pre-salt by 2030, and
+    tie-back economics now put deepwater breakevens near USD&nbsp;35 per barrel.</p>
+    <div class="statgrid">
+      <div class="stat"><b>4.4bn</b><span>USD in subsea awards, Apr-Jul 2026</span></div>
+      <div class="stat"><b>47</b><span>offshore FIDs in 2025, up from 38</span></div>
+      <div class="stat"><b>58%</b><span>of global EPCI value held by the top 5</span></div>
+      <div class="stat"><b>36bn</b><span>USD projected market size by 2034</span></div>
+    </div>
+    <p>The subsea market is not one single thing. There are vessel owners, equipment
+    manufacturers, cable makers and diversified giants, and they do not bid for the same
+    contracts. This study maps who actually competes with whom.</p>
+  </div>
+</section>
+
+<!-- 1000 m · METHOD -->
+<section class="band z2">
+  <div class="inner">
+    <div class="depthtag">1,000 m · photic limit</div>
+    <h2>The method, tool by tool</h2>
+    <div class="step"><span class="tool">pandas</span>
+      <h3>1 · Build the dataset</h3>
+      <p>One row per company, nine features each: estimated subsea revenue, share of the
+      business that is truly subsea, scope breadth (SPS, SURF installation, flexibles,
+      cables, services), fleet size and Brazil presence. Sources: 2025 annual reports
+      and market research. Every estimate is declared and editable.</p></div>
+    <div class="step"><span class="tool">scikit-learn · StandardScaler</span>
+      <h3>2 · Standardize</h3>
+      <p>Fleet ranges from 0 to 50 vessels; scope flags are 0 or 1. Without
+      standardization the big numbers crush the small ones and the clustering is
+      meaningless.</p></div>
+    <div class="step"><span class="tool">scikit-learn · K-Means + silhouette</span>
+      <h3>3 · Let the algorithm find the groups</h3>
+      <p>I did not tell it which groups exist. I tested k from 2 to 7 and the silhouette
+      score picked k&nbsp;=&nbsp;6.</p></div>
+    <div class="step"><span class="tool">scipy · Ward linkage</span>
+      <h3>4 · Cross-check with a second method</h3>
+      <p>Hierarchical clustering drew the same structure. Two independent methods,
+      same map.</p></div>
+    <div class="step"><span class="tool">numpy · distance decomposition</span>
+      <h3>5 · Explain the outliers</h3>
+      <p>For every company sitting alone, decompose the distance to its nearest
+      neighbour and name the variable responsible.</p></div>
+  </div>
+</section>
+
+<!-- 2000 m · THE MAP -->
+<section class="band z3">
+  <div class="wide">
+    <div class="depthtag">2,000 m · Búzios depth</div>
+    <h2>Six strategic groups. Six different ways of buying.</h2>
+    <figure>
+      <img src="images/hero_subsea_infographic.png" alt="Infographic: the subsea market decoded, cluster map and forecasts">
+      <figcaption>The full picture: market stats, the cluster map (K-Means + PCA, bubble = estimated subsea revenue) and three independent market forecasts.</figcaption>
+    </figure>
+    <div class="inner" style="margin:0">
+      <div class="finding"><div class="bar" style="background:var(--cyan)"></div><div>
+        <h3>The fleet owners: Subsea7, Saipem, DOF</h3>
+        <p>Installation is king. And the finding I keep coming back to: the algorithm placed
+        Subsea7 and Saipem as the two closest profiles in the entire industry, the exact
+        two companies merging into Saipem7 in 2026. The math and the M&amp;A bankers reached
+        the same conclusion.</p></div></div>
+      <div class="finding"><div class="bar" style="background:var(--gold)"></div><div>
+        <h3>The lone integrated player: TechnipFMC</h3>
+        <p>Isolated because it has too much: more than two standard deviations above the
+        industry in scope breadth, the only company that manufactures equipment, makes
+        cables and installs. On this map, isolation means moat.</p></div></div>
+      <div class="finding"><div class="bar" style="background:#8fa6b8"></div><div>
+        <h3>The opposite case: McDermott</h3>
+        <p>Also alone, for the opposite reason. The distance decomposition shows an
+        installer's profile (surf_inst drives 41% of its isolation) without the scale of
+        the fleet club. Same shape on the chart, opposite story.</p></div></div>
+      <div class="finding"><div class="bar" style="background:var(--lilac)"></div><div>
+        <h3>The rest of the picture</h3>
+        <p>Cable specialists (Prysmian, Nexans), services and intervention (Oceaneering,
+        Helix) and the diversified giants (SLB, Baker Hughes, Halliburton, NOV, Aker,
+        Innovex). Each group is a different buying center with different pain points and
+        different procurement logic.</p></div></div>
+    </div>
+    <figure>
+      <img src="images/03_dendrogram_ward.png" alt="Dendrogram: the subsea family tree">
+      <figcaption>The family tree (Ward linkage). Subsea7 and Saipem join at the very base: the Saipem7 deal, in numbers.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 2170 m · STRESS TESTS -->
+<section class="band z4">
+  <div class="wide">
+    <div class="depthtag">2,170 m · Sépia depth</div>
+    <h2>I tried to destroy my own study</h2>
+    <div class="inner" style="margin:0">
+      <p>A clustering of fifteen companies deserves suspicion, including mine. So before
+      publishing I attacked it three ways. I removed each feature in turn and the groups
+      held, with a mean Adjusted Rand Index of 0.73. I deliberately corrupted my own
+      estimates by twenty percent across three hundred Monte Carlo simulations and got
+      ninety percent average cluster stability. And I re-ran everything with Gower
+      distance, the technically correct metric for mixed continuous and binary data,
+      implemented from scratch in about ten lines. Same structure every time.</p>
+    </div>
+    <figure>
+      <img src="images/en_03_stability.png" alt="Monte Carlo stability per company">
+      <figcaption>The stress test: share of 300 Monte Carlo runs in which each company stayed in its group. Every company stays above the 70% threshold; the least stable, McDermott, still holds its group in 73% of runs.</figcaption>
+    </figure>
+    <div class="inner" style="margin:0">
+      <blockquote>The difference between a weak study and an honest one is not the absence
+      of limitations. It is admitting them.</blockquote>
+      <p>This remains a descriptive, exploratory analysis: it quantifies and organizes
+      known similarities rather than discovering them blindly, and it is sensitive to the
+      features chosen. That is exactly why the dataset is open. If you have better numbers
+      than my estimates, contributions are welcome.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 3000 m · SEABED / AUTHOR -->
+<section class="band z5">
+  <div class="inner">
+    <div class="depthtag">3,000 m · seabed</div>
+    <h2>Why a salesperson ran this study</h2>
+    <p>I work in sales in this ecosystem, supplying mission-critical materials
+    (buoyancy, insulation and protection systems) to the very players on this map,
+    and I hold a postgraduate degree in data science. I believe the best commercial
+    conversations start with genuinely understanding the client's market. This page
+    is what that looks like in practice.</p>
+    <p>Consolidation is real: fewer, bigger buyers mean supplier qualification and
+    relationships matter more than ever, and each cluster buys differently. Fleet
+    owners buy schedule certainty. Integrated players buy technology and IP. Winning
+    proposals speak the language of the cluster, not a generic subsea pitch.</p>
+    <p style="margin-top:2rem">
+      <a class="btn solid" href="https://github.com/">Browse the code &amp; data</a>
+      <a class="btn" href="top15_subsea_clusters.ipynb">Download the notebook</a>
+    </p>
+    <h3 style="margin-top:3rem">Sources</h3>
+    <p class="sources">Company press releases and 2025-26 annual reports (Subsea7, TechnipFMC,
+    Saipem, Baker Hughes, Oceaneering) · Mordor Intelligence, Subsea Systems Market 2026 ·
+    Spherical Insights, Top 20 Subsea Companies 2026 · Fortune Business Insights ·
+    DataM Intelligence · All revenue figures are group-level and rounded; subsea share,
+    fleet and scope flags are the author's declared estimates.</p>
+    <footer><div class="seabed">SEABED REACHED · 3,000 m</div></footer>
+  </div>
+</section>
+
+</main>
+
+<script>
+  (function(){
+    var dv = document.getElementById('dv');
+    if(!dv) return;
+    function upd(){
+      var h = document.documentElement;
+      var f = h.scrollTop / Math.max(h.scrollHeight - h.clientHeight, 1);
+      dv.textContent = Math.round(f * 3000) + ' m';
+    }
+    addEventListener('scroll', upd, {passive:true}); upd();
+  })();
+</script>
+</body>
+</html>
